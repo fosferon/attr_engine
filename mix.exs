@@ -39,9 +39,9 @@ defmodule AttrEngine.MixProject do
   end
 
   defp description do
-    "Parameterized attribute engine — schema-driven content modelling with " <>
-      "4-layer config cascade, DAG composition, multilingual resolution, " <>
-      "and pluggable rendering. Powers MOBuS CMS, MOBuS Platform, and ArtistCircle.tv."
+    "Schema-driven content modelling with a 4-layer config cascade, " <>
+      "DAG attribute set composition, multilingual resolution, " <>
+      "and pluggable HTML/envelope rendering. Built on Ecto + JSONB."
   end
 
   defp package do
