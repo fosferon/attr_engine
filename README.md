@@ -20,13 +20,14 @@ AttrEngine is for applications where **the data shape is defined at runtime, not
 - Elixir >= 1.19
 - Ecto >= 3.10 with a configured repo
 - PostgreSQL (uses JSONB columns)
+- Optional: [Flop](https://hex.pm/packages/flop) for paginated/filterable queries
 
 ## Installation
 
 ```elixir
 def deps do
   [
-    {:attr_engine, "~> 0.1"}
+    {:attr_engine, "~> 0.2"}
   ]
 end
 ```
@@ -70,6 +71,18 @@ config :attr_engine,
   }
 ```
 
+## What's new in v0.2
+
+- **Embedded config schemas** — `data_config` and `ui_config` are now `embeds_one` structs
+  (`DataConfig`, `UIConfig`) with typed fields and validation, while remaining compatible
+  with plain maps via the cascade normalizer.
+- **Virtual fields** — `sample`, `data_preview`, `ui_preview`, `ui_state` for transient UI state.
+- **Identifier locking** — `UIConfig` carries `lock_handle?` / `lock_code?` flags; persisted
+  records reject changes to locked identifiers.
+- **Flop integration** — `Attribute` derives `Flop.Schema` when Flop is available, enabling
+  paginated, filtered, sorted queries out of the box.
+- **Draft config** — `draft_config` field for staged configuration changes before promotion.
+
 ## Data Model
 
 ```
@@ -103,7 +116,7 @@ config :attr_engine,
 
 | Entity | Role |
 |---|---|
-| **Attribute** | Structural primitive — defines a field type (`:string`, `:asset`, `:boolean`, etc.) with default `data_config` and `ui_config` |
+| **Attribute** | Structural primitive — defines a field type with embedded `DataConfig` / `UIConfig`, virtual preview fields, and optional Flop filtering |
 | **AttributeSet** | Named group of attributes — a reusable content shape (e.g., "Hero Banner", "Contact Card") |
 | **ASA** (AttributeSetAttribute) | Join table carrying semantic identity + per-usage config overrides |
 | **ASD** (AttributeSetData) | A content instance — JSONB data owned by a set, with per-instance ui_config overrides |
@@ -138,25 +151,25 @@ or validation per AttributeSet (layer 2) and even per content instance (layer 3)
 alias AttrEngine.Schema.{Attribute, AttributeSet, AttributeSetData}
 alias AttrEngine.Schema.{BlockType, Block}
 
-# Create a text attribute
+# Create a text attribute — v0.2+ uses embedded structs for configs
 {:ok, title} =
   %Attribute{}
   |> Attribute.changeset(%{
     "name" => "Title",
-    "easy_mode" => true,  # auto-generates handle, code, state
-    "data_config" => %{"type" => "string", "localized" => true},
-    "ui_config" => %{"tag" => "h2", "classes" => "text-2xl font-bold"}
+    "easy_mode" => true,
+    "data_config" => %{"type" => "string", "required" => true, "has_default" => false},
+    "ui_config" => %{"type" => "text", "lock_handle?" => false}
   })
   |> AttrEngine.repo().insert()
 
-# Create an image attribute
+# Plain maps still work — the cascade normalizer handles both
 {:ok, image} =
   %Attribute{}
   |> Attribute.changeset(%{
     "name" => "Background Image",
     "easy_mode" => true,
-    "data_config" => %{"type" => "asset"},
-    "ui_config" => %{"classes" => "w-full hero-bg"}
+    "data_config" => %{"type" => "binary", "required" => false, "has_default" => false},
+    "ui_config" => %{"type" => "file"}
   })
   |> AttrEngine.repo().insert()
 ```
