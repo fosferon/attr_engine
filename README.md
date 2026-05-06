@@ -82,6 +82,7 @@ config :attr_engine,
 - **Flop integration** — `Attribute` derives `Flop.Schema` when Flop is available, enabling
   paginated, filtered, sorted queries out of the box.
 - **Draft config** — `draft_config` field for staged configuration changes before promotion.
+- **Multi-tenant** — all public APIs accept `prefix: "tenant_schema"` in opts for Postgres schema-per-tenant scoping.
 
 ## Data Model
 
@@ -329,6 +330,24 @@ config :attr_engine,
 ```
 
 Component modules must implement `render(data, locale) :: String.t()`.
+
+## Multi-Tenant Queries
+
+For schema-per-tenant architectures, pass `prefix: "tenant_schema"` to any public API
+that hits the database:
+
+```elixir
+# Cascade resolution scoped to a tenant
+attrs_meta = AttrEngine.Cascade.resolve_attrs_meta(set_id, prefix: "tenant_42")
+
+# Rendering scoped to a tenant
+html = AttrEngine.Render.Block.render("hero_block", data, "en", prefix: "tenant_42")
+
+# AttributeSet changeset with tenant-scoped uniqueness check
+AttributeSet.changeset(set, attrs, prefix: "tenant_42")
+```
+
+This is fully backward compatible — omit `:prefix` and all queries run against the default schema.
 
 ## Table Prefixes
 
