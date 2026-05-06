@@ -1,7 +1,7 @@
 defmodule AttrEngine.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.2.0"
   @source_url "https://github.com/fosferon/attr_engine"
 
   def project do
@@ -34,6 +34,7 @@ defmodule AttrEngine.MixProject do
       {:postgrex, ">= 0.0.0", optional: true},
       {:jason, "~> 1.2"},
       {:slugify, "~> 1.3"},
+      {:flop, "~> 0.25", optional: true},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]
   end

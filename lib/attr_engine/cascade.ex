@@ -57,8 +57,10 @@ defmodule AttrEngine.Cascade do
       attr = asa.attribute
 
       # Layer 1 + 2: merge Attribute defaults with ASA overrides
-      data_config = deep_merge(attr.data_config || %{}, asa.data_config || %{})
-      ui_config = deep_merge(attr.ui_config || %{}, asa.ui_config || %{})
+      # Attribute configs may be embedded structs (v0.2+) or plain maps (v0.1);
+      # normalize to string-keyed maps before merging with ASA plain-map overrides.
+      data_config = deep_merge(normalize_config(attr.data_config), asa.data_config || %{})
+      ui_config = deep_merge(normalize_config(attr.ui_config), asa.ui_config || %{})
 
       type =
         case data_config["type"] do
@@ -146,6 +148,21 @@ defmodule AttrEngine.Cascade do
   end
 
   # --- Private helpers ---
+
+  # Converts an embedded struct (or nil/plain map) to a string-keyed map
+  # suitable for cascade merging. Drops nil values and the embed's internal :id.
+  defp normalize_config(nil), do: %{}
+
+  defp normalize_config(%{__struct__: _} = struct) do
+    struct
+    |> Map.from_struct()
+    |> Map.delete(:id)
+    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+    |> Map.new(fn {k, v} -> {to_string(k), v} end)
+  end
+
+  defp normalize_config(map) when is_map(map), do: map
+  defp normalize_config(_), do: %{}
 
   defp deep_merge(base, override) when is_map(base) and is_map(override) do
     Map.merge(base, override, fn
