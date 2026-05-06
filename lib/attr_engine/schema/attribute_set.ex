@@ -26,6 +26,36 @@ defmodule AttrEngine.Schema.AttributeSet do
   use Ecto.Schema
   import Ecto.Changeset
 
+  if Code.ensure_loaded?(Flop.Schema) do
+    @derive {
+      Flop.Schema,
+      default_order: %{
+        order_by: [:name],
+        order_directions: [:asc, :desc]
+      },
+      filterable: [
+        :name,
+        :code,
+        :handle,
+        :state,
+        :active,
+        :system,
+        :searchable,
+        :sort
+      ],
+      sortable: [
+        :name,
+        :code,
+        :handle,
+        :state,
+        :sort
+      ],
+      max_limit: 1000,
+      default_limit: 10,
+      adapter_opts: []
+    }
+  end
+
   @primary_key {:id, :id, autogenerate: true}
   @foreign_key_type :id
 
@@ -37,7 +67,7 @@ defmodule AttrEngine.Schema.AttributeSet do
     field :code, :string
     field :description, :string
     field :state, :string
-    field :schema, :string, default: "standalone"
+    field :schema, :string, default: "Standalone"
 
     # Config
     field :ui_config, :map, default: %{}
@@ -72,71 +102,131 @@ defmodule AttrEngine.Schema.AttributeSet do
     timestamps(type: :utc_datetime)
   end
 
-  @cast_fields [
-    :pub_id, :sid, :name, :handle, :code, :description, :state, :schema,
-    :ui_config, :data_config, :validations,
-    :active, :system, :searchable, :exportable, :importable,
-    :readonly, :visible, :deleted, :sort, :translations, :easy_mode
+  # --- Field lists for easy_mode vs full mode ---
+
+  @base_fields_easy [
+    :pub_id, :name, :description, :active,
+    :ui_config, :data_config, :validations, :translations
   ]
 
-  @doc "Standard changeset with easy_mode support."
+  @base_fields_full [
+    :pub_id, :name, :handle, :code, :description, :state, :sort,
+    :active, :visible, :readonly, :deleted, :system,
+    :searchable, :exportable, :importable,
+    :ui_config, :data_config, :validations, :translations
+  ]
+
+  @required_easy [:name, :active]
+
+  @required_full [
+    :name, :handle, :code, :state, :active, :visible, :system,
+    :searchable, :exportable, :importable, :readonly, :deleted, :sort
+  ]
+
+  @doc """
+  Standard changeset with easy_mode support.
+
+  In easy_mode, handle, code, state, and flags are auto-generated from the
+  name. In full mode, all fields must be provided explicitly.
+
+  ## Options
+
+  - `:tenant_id` — when set, validates handle uniqueness within the tenant
+  """
+  @spec changeset(%__MODULE__{}, map(), keyword()) :: Ecto.Changeset.t()
   def changeset(attribute_set, attrs, opts \\ []) do
+    easy_mode = get_in(attrs, ["easy_mode"]) || false
+
     attribute_set
-    |> cast(attrs, @cast_fields)
+    |> cast(attrs, base_fields(easy_mode))
     |> maybe_put_pub_id()
-    |> validate_required([:name])
-    |> handle_easy_mode()
+    |> maybe_generate_handle(easy_mode)
+    |> maybe_generate_code(easy_mode)
+    |> maybe_set_defaults(easy_mode)
+    |> validate_required(required_fields(easy_mode))
     |> maybe_validate_unique_handle(opts)
     |> maybe_lock_handle()
+    |> handle_attributes()
   end
 
-  # --- Easy mode ---
+  @doc """
+  Setup changeset for workflow-driven creation with nested attributes.
 
-  defp handle_easy_mode(cs) do
-    if get_field(cs, :easy_mode) do
-      cs
-      |> maybe_generate_handle()
-      |> maybe_generate_code()
-      |> maybe_set_defaults()
-    else
-      cs |> validate_required([:handle, :state])
-    end
+  Like `changeset/3` but uses `cast_assoc(:attributes)` to create nested
+  Attribute records in a single operation. Used by attribute set creation
+  workflows that define the set and its attributes in one step.
+
+  ## Options
+
+  - `:tenant_id` — when set, validates handle uniqueness within the tenant
+  """
+  @spec setup_changeset(%__MODULE__{}, map(), keyword()) :: Ecto.Changeset.t()
+  def setup_changeset(attribute_set, attrs, opts \\ []) do
+    easy_mode = get_in(attrs, ["easy_mode"]) || false
+
+    attribute_set
+    |> cast(attrs, base_fields(easy_mode))
+    |> maybe_put_pub_id()
+    |> maybe_generate_handle(easy_mode)
+    |> maybe_generate_code(easy_mode)
+    |> maybe_set_defaults(easy_mode)
+    |> validate_required(required_fields(easy_mode))
+    |> maybe_validate_unique_handle(opts)
+    |> maybe_lock_handle()
+    |> cast_assoc(:attributes, with: &AttrEngine.Schema.Attribute.changeset/2)
   end
 
-  defp maybe_generate_handle(cs) do
-    case {get_field(cs, :handle), get_change(cs, :name)} do
-      {h, name} when (is_nil(h) or h == "") and is_binary(name) ->
+  # --- Field lists ---
+
+  defp base_fields(true), do: @base_fields_easy
+  defp base_fields(_), do: @base_fields_full
+
+  defp required_fields(true), do: @required_easy
+  defp required_fields(_), do: @required_full
+
+  # --- Easy mode auto-generation ---
+
+  defp maybe_generate_handle(changeset, true) do
+    case get_change(changeset, :name) do
+      nil ->
+        changeset
+
+      name ->
         handle =
           name
           |> String.downcase()
           |> String.replace(~r/[^a-z0-9]+/, "_")
           |> String.trim("_")
 
-        put_change(cs, :handle, handle)
-
-      _ ->
-        cs
+        put_change(changeset, :handle, handle)
     end
   end
 
-  defp maybe_generate_code(cs) do
-    case get_field(cs, :code) do
-      c when is_nil(c) or c == "" ->
-        put_change(cs, :code, String.upcase(get_field(cs, :handle) || ""))
+  defp maybe_generate_handle(changeset, _), do: changeset
 
-      _ ->
-        cs
+  defp maybe_generate_code(changeset, true) do
+    case get_field(changeset, :handle) do
+      nil -> changeset
+      handle -> put_change(changeset, :code, String.upcase(handle))
     end
   end
 
-  defp maybe_set_defaults(cs) do
-    cs
+  defp maybe_generate_code(changeset, _), do: changeset
+
+  defp maybe_set_defaults(changeset, true) do
+    changeset
     |> put_change(:state, "initialised")
     |> put_change(:visible, true)
+    |> put_change(:system, false)
     |> put_change(:searchable, true)
     |> put_change(:exportable, true)
     |> put_change(:importable, true)
+    |> put_change(:readonly, false)
+    |> put_change(:deleted, false)
+    |> put_change(:sort, 0)
   end
+
+  defp maybe_set_defaults(changeset, _), do: changeset
 
   # --- Handle locking ---
 
@@ -155,7 +245,19 @@ defmodule AttrEngine.Schema.AttributeSet do
     end
   end
 
-  # --- Unique handle validation (requires repo) ---
+  # --- Attribute association handling ---
+
+  defp handle_attributes(changeset) do
+    case get_field(changeset, :state) do
+      "initialised" ->
+        cast_assoc(changeset, :attributes)
+
+      _ ->
+        cast_assoc(changeset, :attributes, required: true)
+    end
+  end
+
+  # --- Unique handle validation ---
 
   defp maybe_validate_unique_handle(cs, opts) do
     tenant_id = Keyword.get(opts, :tenant_id)
@@ -185,6 +287,8 @@ defmodule AttrEngine.Schema.AttributeSet do
       cs
     end
   end
+
+  # --- Helpers ---
 
   defp persisted?(cs), do: get_field(cs, :id) != nil
 
