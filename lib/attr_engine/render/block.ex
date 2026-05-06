@@ -51,6 +51,7 @@ defmodule AttrEngine.Render.Block do
 
   - `:asd_ui_config` — per-instance ui_config overrides (layer 3)
   - `:mode` — `:html` (default) or `:envelope`
+  - `:prefix` — Postgres schema prefix for multi-tenant query scoping
   """
   @spec render(String.t(), map(), String.t(), keyword()) :: String.t() | map()
   def render(block_type_handle, data, locale, opts \\ []) do
@@ -82,12 +83,14 @@ defmodule AttrEngine.Render.Block do
   defp render_via_cascade(handle, data, locale, opts) do
     import Ecto.Query
 
+    repo_opts = Keyword.take(opts, [:prefix])
+
     block_type =
       BlockType
       |> where([bt], bt.handle == ^handle and bt.deleted == false)
       |> limit(1)
-      |> AttrEngine.repo().one()
-      |> AttrEngine.repo().preload(:attribute_set)
+      |> AttrEngine.repo().one(repo_opts)
+      |> AttrEngine.repo().preload(:attribute_set, repo_opts)
 
     case block_type do
       nil -> ""
@@ -100,7 +103,8 @@ defmodule AttrEngine.Render.Block do
     mode = Keyword.get(opts, :mode, :html)
 
     # Resolve attrs metadata via cascade (layers 1+2)
-    attrs_meta = Cascade.resolve_attrs_meta(block_type.attribute_set.id)
+    repo_opts = Keyword.take(opts, [:prefix])
+    attrs_meta = Cascade.resolve_attrs_meta(block_type.attribute_set.id, repo_opts)
 
     # Apply ASD overrides (layer 3)
     attrs_meta = Cascade.apply_asd_overrides(attrs_meta, asd_ui)

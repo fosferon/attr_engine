@@ -132,6 +132,7 @@ defmodule AttrEngine.Schema.AttributeSet do
   ## Options
 
   - `:tenant_id` — when set, validates handle uniqueness within the tenant
+  - `:prefix` — Postgres schema prefix for multi-tenant query scoping
   """
   @spec changeset(%__MODULE__{}, map(), keyword()) :: Ecto.Changeset.t()
   def changeset(attribute_set, attrs, opts \\ []) do
@@ -159,6 +160,7 @@ defmodule AttrEngine.Schema.AttributeSet do
   ## Options
 
   - `:tenant_id` — when set, validates handle uniqueness within the tenant
+  - `:prefix` — Postgres schema prefix for multi-tenant query scoping
   """
   @spec setup_changeset(%__MODULE__{}, map(), keyword()) :: Ecto.Changeset.t()
   def setup_changeset(attribute_set, attrs, opts \\ []) do
@@ -261,6 +263,7 @@ defmodule AttrEngine.Schema.AttributeSet do
 
   defp maybe_validate_unique_handle(cs, opts) do
     tenant_id = Keyword.get(opts, :tenant_id)
+    repo_opts = Keyword.take(opts, [:prefix])
 
     if tenant_id && get_change(cs, :handle) do
       validate_change(cs, :handle, fn :handle, handle ->
@@ -278,7 +281,7 @@ defmodule AttrEngine.Schema.AttributeSet do
             id -> from(as in query, where: as.id != ^id)
           end
 
-        case AttrEngine.repo().one(query) do
+        case AttrEngine.repo().one(query, repo_opts) do
           0 -> []
           _ -> [handle: "has already been taken"]
         end

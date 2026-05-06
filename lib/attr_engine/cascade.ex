@@ -20,6 +20,14 @@ defmodule AttrEngine.Cascade do
 
       # Get the full rendering context (data + ui keys flattened)
       context = AttrEngine.Cascade.build_context(attrs_meta, data, locale)
+
+  ## Multi-tenant (schema-per-tenant)
+
+  All functions that hit the database accept an `opts` keyword list.
+  Pass `prefix: "tenant_schema"` to scope queries to a specific
+  Postgres schema:
+
+      attrs_meta = AttrEngine.Cascade.resolve_attrs_meta(set_id, prefix: "tenant_42")
   """
 
   alias AttrEngine.Schema.AttributeSetAttribute
@@ -42,16 +50,18 @@ defmodule AttrEngine.Cascade do
 
   Ordered by ASA.sort.
   """
-  @spec resolve_attrs_meta(integer()) :: [map()]
-  def resolve_attrs_meta(attribute_set_id) do
+  @spec resolve_attrs_meta(integer(), keyword()) :: [map()]
+  def resolve_attrs_meta(attribute_set_id, opts \\ []) do
     import Ecto.Query
+
+    repo_opts = Keyword.take(opts, [:prefix])
 
     asas =
       AttributeSetAttribute
       |> where([asa], asa.attribute_set_id == ^attribute_set_id)
       |> order_by([asa], asc: asa.sort)
-      |> AttrEngine.repo().all()
-      |> AttrEngine.repo().preload(:attribute)
+      |> AttrEngine.repo().all(repo_opts)
+      |> AttrEngine.repo().preload(:attribute, repo_opts)
 
     Enum.map(asas, fn asa ->
       attr = asa.attribute
