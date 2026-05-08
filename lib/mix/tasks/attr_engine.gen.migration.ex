@@ -123,13 +123,13 @@ defmodule Mix.Tasks.AttrEngine.Gen.Migration do
         create index(:#{p.("attribute_sets")}, [:pub_id])
         create index(:#{p.("attribute_sets")}, [:state])
 
-        # --- Attribute Set Attributes (join table) ---
-        create table(:#{p.("attribute_set_attributes")}, primary_key: false) do
-          add :attribute_set_id, references(:#{p.("attribute_sets")}, on_delete: :delete_all), primary_key: true
-          add :attribute_id, references(:#{p.("attributes")}, on_delete: :delete_all), primary_key: true
+        # --- Attribute Set Attributes (join table with surrogate PK) ---
+        create table(:#{p.("attribute_set_attributes")}) do
+          add :attribute_set_id, references(:#{p.("attribute_sets")}, on_delete: :delete_all), null: false
+          add :attribute_id, references(:#{p.("attributes")}, on_delete: :delete_all), null: false
 
           add :name, :string
-          add :handle, :string
+          add :handle, :string, null: false
           add :code, :string
           add :description, :text
           add :state, :string
@@ -153,8 +153,13 @@ defmodule Mix.Tasks.AttrEngine.Gen.Migration do
           timestamps(type: :utc_datetime)
         end
 
+        create unique_index(:#{p.("attribute_set_attributes")}, [:attribute_set_id, :handle],
+          name: :#{p.("attribute_set_attributes")}_unique_set_handle
+        )
         create index(:#{p.("attribute_set_attributes")}, [:attribute_set_id])
         create index(:#{p.("attribute_set_attributes")}, [:attribute_id])
+
+        execute "ALTER TABLE #{p.("attribute_set_attributes")} ADD CONSTRAINT #{p.("asa_handle_non_empty")} CHECK (handle <> '')"
 
         # --- Attribute Set Data ---
         create table(:#{p.("attribute_set_data")}) do

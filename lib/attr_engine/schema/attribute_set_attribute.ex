@@ -5,6 +5,19 @@ defmodule AttrEngine.Schema.AttributeSetAttribute do
   The ASA is where a generic structural primitive (e.g. "text_input") becomes
   a named field with context (e.g. "title" in one set, "legend" in another).
 
+  ## Multi-handle support (v0.3.0+)
+
+  A single Attribute can appear multiple times within the same AttributeSet,
+  distinguished by `handle`. This enables structural primitives (string,
+  integer, currency, etc.) to be reused across named fields:
+
+      # Two ASAs in the same set, both pointing at the "string" Attribute
+      %ASA{handle: "first_name", attribute_id: string_attr_id, attribute_set_id: set_id}
+      %ASA{handle: "last_name",  attribute_id: string_attr_id, attribute_set_id: set_id}
+
+  The uniqueness invariant is `(attribute_set_id, handle)` — each handle
+  appears at most once per set. Handle is required and must be non-empty.
+
   ## Config cascade — Layer 2
 
   ASA carries its own `data_config` and `ui_config` that override the parent
@@ -17,7 +30,7 @@ defmodule AttrEngine.Schema.AttributeSetAttribute do
 
   ## Key fields
 
-  - `handle` — the semantic name this attribute takes in this set
+  - `handle` — the semantic name this attribute takes in this set (required, unique per set)
   - `data_config` — type-specific config: `%{"type" => "string", "localized" => true}`
   - `ui_config` — presentation overrides: `%{"tag" => "h2", "classes" => "..."}`
   - `sort` — position within the set
@@ -25,7 +38,7 @@ defmodule AttrEngine.Schema.AttributeSetAttribute do
   use Ecto.Schema
   import Ecto.Changeset
 
-  @primary_key false
+  @primary_key {:id, :id, autogenerate: true}
   @foreign_key_type :id
 
   schema "attribute_set_attributes" do
@@ -57,12 +70,10 @@ defmodule AttrEngine.Schema.AttributeSetAttribute do
     field :translations, :map, default: %{}
 
     belongs_to :attribute_set, AttrEngine.Schema.AttributeSet,
-      foreign_key: :attribute_set_id,
-      primary_key: true
+      foreign_key: :attribute_set_id
 
     belongs_to :attribute, AttrEngine.Schema.Attribute,
-      foreign_key: :attribute_id,
-      primary_key: true
+      foreign_key: :attribute_id
 
     timestamps(type: :utc_datetime)
   end
@@ -75,10 +86,25 @@ defmodule AttrEngine.Schema.AttributeSetAttribute do
     :attribute_set_id, :attribute_id
   ]
 
-  @doc "Standard changeset — requires both foreign keys."
+  @doc "Standard changeset — requires handle and both foreign keys."
   def changeset(asa, attrs) do
     asa
     |> cast(attrs, @cast_fields)
-    |> validate_required([:attribute_set_id, :attribute_id])
+    |> validate_required([:handle, :attribute_set_id, :attribute_id])
+    |> validate_handle_non_empty()
+    |> unique_constraint([:attribute_set_id, :handle],
+      name: :attribute_set_attributes_unique_set_handle,
+      message: "handle already exists in this attribute set"
+    )
+  end
+
+  defp validate_handle_non_empty(changeset) do
+    validate_change(changeset, :handle, fn :handle, handle ->
+      if String.trim(handle) == "" do
+        [handle: "must not be empty"]
+      else
+        []
+      end
+    end)
   end
 end
