@@ -19,7 +19,7 @@ AttrEngine is for applications where **the data shape is defined at runtime, not
 
 - Elixir >= 1.19
 - Ecto >= 3.10 with a configured repo
-- PostgreSQL (uses JSONB columns)
+- A database: PostgreSQL (uses JSONB columns) or SQLite (via `ecto_sqlite3`; `:map` columns are stored as JSON TEXT). The migration generator emits adapter-appropriate DDL — see [Setup](#setup).
 - Optional: [Flop](https://hex.pm/packages/flop) for paginated/filterable queries
 
 ## Installation
@@ -51,6 +51,12 @@ mix ecto.migrate
 ```
 
 This creates 9 tables. See [Data Model](#data-model) below for the full schema.
+
+The generator picks its DDL from the configured repo's adapter: PostgreSQL by
+default, SQLite when the repo uses `Ecto.Adapters.SQLite3` (`:uuid` columns
+become `:string`; the `attribute_set_attributes` handle CHECK is enforced at the
+application layer instead of via `ALTER TABLE ... ADD CONSTRAINT`, which SQLite
+does not support). Override detection with `mix attr_engine.gen.migration --db sqlite`.
 
 ### 3. Optional: configure renderers
 
