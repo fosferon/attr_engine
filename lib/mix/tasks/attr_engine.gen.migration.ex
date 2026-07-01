@@ -138,6 +138,7 @@ defmodule Mix.Tasks.AttrEngine.Gen.Migration do
 
           add :sort, :integer, default: 0
           add :translations, :map, default: %{}
+          add :draft_config, :map, default: %{}
 
           timestamps(type: :utc_datetime)
         end
@@ -361,6 +362,7 @@ defmodule Mix.Tasks.AttrEngine.Gen.Migration do
 
           add :sort, :integer, default: 0
           add :translations, :map, default: %{}
+          add :draft_config, :map, default: %{}
 
           timestamps(type: :utc_datetime)
         end

@@ -21,6 +21,12 @@ defmodule Mix.Tasks.AttrEngine.Gen.MigrationTest do
       refute sql =~ "execute "
     end
 
+    test "emits every persisted Attribute field, incl. draft_config", %{sql: sql} do
+      # draft_config is a persisted :map field on Attribute (added v0.2.0);
+      # the generator must emit it or inserts fail.
+      assert sql =~ "add :draft_config, :map, default: %{}"
+    end
+
     test "still creates every attr_engine table", %{sql: sql} do
       assert sql =~ "use Ecto.Migration"
 
@@ -48,6 +54,11 @@ defmodule Mix.Tasks.AttrEngine.Gen.MigrationTest do
       assert pg =~ "add :pub_id, :uuid"
       assert pg =~ "add :owner_id, :uuid"
       assert pg =~ "ADD CONSTRAINT"
+    end
+
+    test "emits every persisted Attribute field, incl. draft_config" do
+      pg = Migration.migration_content("", :postgres)
+      assert pg =~ "add :draft_config, :map, default: %{}"
     end
 
     test "an unknown adapter falls back to the Postgres template" do
