@@ -27,7 +27,7 @@ AttrEngine is for applications where **the data shape is defined at runtime, not
 ```elixir
 def deps do
   [
-    {:attr_engine, "~> 0.3"}
+    {:attr_engine, "~> 0.4"}
   ]
 end
 ```

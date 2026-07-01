@@ -6,3 +6,4 @@
 .elixir_ls/
 .logs
 *.tar
+erl_crash.dump

@@ -10,6 +10,8 @@ defmodule Mix.Tasks.AttrEngine.Gen.Migration do
 
       --prefix PREFIX   Table name prefix (e.g. "cms_" or "ac_")
       --repo REPO       Target Ecto repo module
+      --db DB            Force adapter: `sqlite` or `postgres`. Without it,
+                        the repo's `__adapter__/0` decides (default: postgres).
 
   Creates migrations for:
   - attributes
