@@ -126,16 +126,19 @@ defmodule AttrEngine.Cascade do
   Builds a flat rendering context from resolved attrs_meta and data.
 
   Returns a map with:
-  - Data values keyed by handle
+  - Data values keyed by handle (with any declared transforms applied)
   - UI keys prefixed: `{handle}_tag`, `{handle}_class`, etc.
   - Block-level UI keys from the AttributeSet: `block_tag`, `block_class`, etc.
   """
   @spec build_context([map()], map(), map()) :: map()
   def build_context(attrs_meta, data, set_ui_config \\ %{}) do
+    # Apply transforms before building context
+    transformed_data = AttrEngine.Transform.apply_transforms(attrs_meta, data)
+
     # Data values
     data_ctx =
       Enum.reduce(attrs_meta, %{}, fn %{handle: handle}, acc ->
-        Map.put(acc, handle, Map.get(data, handle))
+        Map.put(acc, handle, Map.get(transformed_data, handle))
       end)
 
     # Per-attribute UI keys

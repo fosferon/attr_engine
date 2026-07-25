@@ -27,7 +27,7 @@ defmodule AttrEngine.Render.Block do
       "heading-block" => "heading_block"
   """
 
-  alias AttrEngine.{Cascade, Locale}
+  alias AttrEngine.{Cascade, Locale, Transform}
   alias AttrEngine.Render.Attr, as: RenderAttr
   alias AttrEngine.Schema.BlockType
 
@@ -111,6 +111,9 @@ defmodule AttrEngine.Render.Block do
 
     # Resolve locale on data
     resolved_data = Locale.resolve_deep_heuristic(data, locale)
+
+    # Apply declared transforms (Layer 4: runtime)
+    resolved_data = Transform.apply_transforms(attrs_meta, resolved_data)
 
     # Enrich ui_configs from sibling data (tag_from, class_from)
     attrs_meta = enrich_ui_configs(attrs_meta, resolved_data)
