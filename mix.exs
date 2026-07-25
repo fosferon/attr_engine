@@ -1,7 +1,7 @@
 defmodule AttrEngine.MixProject do
   use Mix.Project
 
-  @version "0.4.1"
+  @version "0.5.0"
   @source_url "https://github.com/fosferon/attr_engine"
 
   def project do
@@ -51,7 +51,7 @@ defmodule AttrEngine.MixProject do
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
       maintainers: ["Leonidas"],
-      files: ~w(lib priv .formatter.exs mix.exs README.md LICENSE)
+      files: ~w(lib priv .formatter.exs mix.exs README.md CHANGELOG.md LICENSE)
     ]
   end
 

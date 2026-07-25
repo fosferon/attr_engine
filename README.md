@@ -27,7 +27,7 @@ AttrEngine is for applications where **the data shape is defined at runtime, not
 ```elixir
 def deps do
   [
-    {:attr_engine, "~> 0.4"}
+    {:attr_engine, "~> 0.5"}
   ]
 end
 ```
@@ -76,6 +76,17 @@ config :attr_engine,
     "superhero" => MyApp.Components.Superhero
   }
 ```
+
+## What's new in v0.5
+
+- **Render-time transforms** — declare a `transform` on any attribute's `data_config`
+  to rewrite its value at resolution/render time. Ships with `redact` and `redact_secret`
+  built-ins; register your own modules or functions. Transforms run automatically inside
+  `Render.Block.render/4` and `Cascade.build_context/3`. See [Render-Time Transforms](#render-time-transforms).
+- **Relation attributes** — a new `data_config.type = "relation"` stores an opaque ref
+  in the ASD while the real value lives in an external store, reached through pluggable
+  source adapters. A `ref_only` mode keeps raw secrets out of the ASD entirely.
+  See [Relation Attributes](#relation-attributes).
 
 ## What's new in v0.2
 
@@ -362,6 +373,144 @@ If you share a database with other applications, use `table_prefix` to namespace
 ```elixir
 config :attr_engine, table_prefix: "cms_"
 # Creates tables: cms_attributes, cms_attribute_sets, cms_attribute_set_attributes, etc.
+```
+
+## Render-Time Transforms
+
+Transforms rewrite an attribute's value at resolution time, before it reaches a renderer
+or API consumer. Declare one with the `transform` key in `data_config`:
+
+```elixir
+# Single transform (built-in)
+data_config = %{"type" => "binary", "transform" => "redact_secret"}
+
+# Pipeline — applied left to right
+data_config = %{"type" => "string", "transform" => ["upcase", "trim"]}
+```
+
+### Built-in transforms
+
+| Name | Effect |
+|---|---|
+| `"redact"` | Replaces any non-nil value with `"••••••••"`; preserves `nil` |
+| `"redact_secret"` | Non-nil → `"[provided]"`, nil/empty → `"[not set]"` — for credential UIs |
+
+### Custom transforms
+
+Register modules (implementing `apply/2`) or functions via config:
+
+```elixir
+config :attr_engine, transforms: %{
+  "currency" => MyApp.Transforms.Currency,                        # module @behaviour AttrEngine.Transform
+  "upcase"   => &String.upcase/1,                                 # 1-arity function
+  "prefix"   => fn value, opts -> opts["prefix"] <> value end    # 2-arity, receives data_config
+}
+```
+
+```elixir
+defmodule MyApp.Transforms.Currency do
+  @behaviour AttrEngine.Transform
+
+  @impl true
+  def apply(value, _opts) when is_number(value) do
+    :erlang.float_to_binary(value / 1.0, decimals: 2)
+  end
+
+  def apply(value, _opts), do: value
+end
+```
+
+External transforms take precedence over built-ins with the same name.
+
+### Applying transforms
+
+Transforms run automatically during `Render.Block.render/4` and `Cascade.build_context/3`.
+To apply them manually (e.g. for an API response):
+
+```elixir
+attrs_meta = AttrEngine.Cascade.resolve_attrs_meta(set_id)
+transformed = AttrEngine.Transform.apply_transforms(attrs_meta, data)
+```
+
+## Relation Attributes
+
+A relation attribute stores an opaque **ref** in the ASD while the real value lives in an
+external store (a secrets vault, another service, a separate table). The engine reaches the
+target through pluggable **source adapters**, so the data model stays decoupled from where
+values physically live.
+
+Declare one via `data_config`:
+
+```elixir
+data_config = %{
+  "type" => "relation",
+  "relation_config" => %{
+    "source" => "vault",          # adapter name, looked up in the registry
+    "ref_only" => true,           # value never materializes in the ASD — only the ref is stored
+    "ref_key" => "my_credential"  # any adapter-specific keys are passed through
+  }
+}
+```
+
+### Registering source adapters
+
+Adapters implement the `AttrEngine.Relation` behaviour (`resolve/2`, `store/2`, `delete/2`)
+and are registered by name:
+
+```elixir
+config :attr_engine, relation_sources: %{
+  "vault" => MyApp.Adapters.Vault,
+  "users" => MyApp.Adapters.Users
+}
+```
+
+```elixir
+defmodule MyApp.Adapters.Vault do
+  @behaviour AttrEngine.Relation
+
+  @impl true
+  def resolve(ref, _config), do: Vault.get(ref)
+
+  @impl true
+  def store(value, config) do
+    name = config["ref_key"] || generate_name()
+    :ok = Vault.put(name, value)
+    {:ok, name}
+  end
+
+  @impl true
+  def delete(ref, _config), do: Vault.delete(ref)
+end
+```
+
+### Read, write, and cleanup
+
+```elixir
+attrs_meta = AttrEngine.Cascade.resolve_attrs_meta(set_id)
+
+# WRITE — routes raw values to their stores, persists refs in the ASD
+{:ok, asd_data} = AttrEngine.Relation.process_writes(attrs_meta, incoming_data)
+
+# READ — resolves refs to values (skips ref_only by default; pass skip_ref_only: false to force)
+{:ok, resolved} = AttrEngine.Relation.resolve_relations(attrs_meta, asd_data)
+
+# CLEANUP — deletes target values when an ASD is removed
+:ok = AttrEngine.Relation.cleanup(attrs_meta, asd_data)
+```
+
+### Secrets pattern
+
+For credentials and other sensitive relations, combine `ref_only: true` with the
+`redact_secret` transform. The raw value is routed to the vault on write and never stored
+in the ASD; on render, the ref is masked so the frontend only ever sees `"[provided]"` or
+`"[not set]"`:
+
+```elixir
+data_config = %{
+  "type" => "relation",
+  "transform" => "redact_secret",
+  "relation_config" => %{"source" => "vault", "ref_only" => true}
+}
 ```
 
 ## License

@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.5.0 — Render-time transforms + relation attributes
+
+### Added
+
+- **`AttrEngine.Transform`** — render-time value transforms declared via
+  `data_config["transform"]` (a string or a list/pipeline). Built-ins: `redact`,
+  `redact_secret`. Custom transforms via the `:transforms` application config
+  (modules implementing `apply/2`, or 1-/2-arity functions). Transforms now run
+  automatically inside `Render.Block.render/4` and `Cascade.build_context/3`.
+- **`AttrEngine.Relation`** — relation resolution runtime for reference attributes
+  (`data_config.type = "relation"`). Stores an opaque ref in the ASD while the value
+  lives in an external store reached through pluggable source adapters
+  (`:relation_sources` config). `ref_only` mode keeps raw values out of the ASD;
+  ships read (`resolve_relations/3`), write (`process_writes/2`), and cleanup
+  (`cleanup/2`) paths.
+
+### Notes
+
+- No schema or migration changes. Backward compatible.
+
 ## v0.3.0 — BREAKING: ASA primary key restructure
 
 ### What changed
@@ -26,7 +46,7 @@ AttributeSet, distinguished by `handle` — enabling structural primitives
 
 ### Consumer migration recipes
 
-**Category (a): Consumers with composite PK (e.g. mobus_umbrella)**
+**Category (a): Consumers with composite PK**
 
 > Before adding NOT NULL / CHECK constraints on `handle`, either backfill
 > handles for existing ASA rows or `DELETE FROM attribute_set_attributes
@@ -72,7 +92,7 @@ def up do
 end
 ```
 
-**Category (c): Consumers already on this shape (e.g. mobus_cms)**
+**Category (c): Consumers already on this shape**
 
 No migration needed.
 
@@ -83,7 +103,7 @@ No migration needed.
 ## v0.2.1
 
 - AttributeSet: conditional `@derive Flop.Schema`, `setup_changeset/3`,
-  schema default `"Standalone"`, easy_mode alignment with mobus_umbrella.
+  schema default `"Standalone"`, easy_mode alignment across schema modules.
 
 ## v0.2.0
 
@@ -91,5 +111,5 @@ No migration needed.
   `Attribute.DataConfig` and `Attribute.UIConfig` embedded schemas.
 - Added `draft_config`, virtual fields (`sample`, `data_preview`,
   `ui_preview`, `ui_state`), conditional `@derive Flop.Schema`.
-- Aligned easy_mode with mobus_umbrella. Added identifier locking.
+- Aligned easy_mode across schema modules. Added identifier locking.
 - Cascade: `normalize_config` handles embedded structs transparently.
